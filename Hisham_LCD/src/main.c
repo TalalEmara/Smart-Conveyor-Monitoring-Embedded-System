@@ -2,14 +2,23 @@
 
 #include "RCC.h"
 #include "Gpio.h"
-#include "Keypad.h"
 #include "lcd.h"
+#include "adc.h"
+#include "pwm.h"
 #include "Std_Types.h"
-
-
+#include <stdint.h>
 volatile uint8 counter = 0x00;
 volatile uint8 button = 0;
 volatile uint8 toggle = 1;
+uint16_t adc_value;
+uint8_t pwm_percent;
+char buffer[16];
+extern void ADC_Init(void);
+extern uint16_t ADC_Read(void);
+extern void PWM_Init(void);
+extern void PWM_SetDuty(uint16_t duty);
+
+
 
 #define NUMBER_OF_CYCLES    1000000
 
@@ -29,11 +38,18 @@ int main(void) {
     Rcc_Enable(RCC_GPIOC);
     Rcc_Enable(RCC_SYSCFG);
 
+    Rcc_Enable(RCC_TIM2);
+    Rcc_Enable(RCC_ADC1);
+
+
+
     // HAL_Init();
     // SystemClock_Config();
 
     // Initialize the LCD
     LCD_Init();
+    ADC_Init();
+    PWM_Init();
 
     // Display static text
     LCD_PrintString("Conveyor Speed:");
@@ -41,7 +57,17 @@ int main(void) {
     LCD_PrintString("Motor Speed:");
 
     while (1) {
-        // Update LCD with dynamic data (e.g., speed, object count)
+        adc_value = ADC_Read();        // 0–4095
+        uint16_t duty = adc_value / 4; // 0–1023 scaled to 0–1000
+        PWM_SetDuty(duty);
+
+        pwm_percent = duty / 10; // 0–100%
+
+        // Display on LCD
+        LCD_SetCursor(LCD_ROW_1, 0);
+        printf(buffer, "PWM: %3d%%     ", pwm_percent);
+        LCD_PrintString(buffer);
+
     }
 
     return 0;

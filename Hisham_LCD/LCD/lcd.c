@@ -3,13 +3,13 @@
 
 // Define pins and ports
 #define LCD_PORT GPIO_A
-#define RS_PIN 0
-#define RW_PIN 1
-#define E_PIN  2
-#define D4_PIN 3
-#define D5_PIN 4
-#define D6_PIN 5
-#define D7_PIN 6
+#define RS_PIN 1
+#define RW_PIN 2
+#define E_PIN  3
+#define D4_PIN 4
+#define D5_PIN 5
+#define D6_PIN 6
+#define D7_PIN 7
 
 #define HIGH 1
 #define LOW  0

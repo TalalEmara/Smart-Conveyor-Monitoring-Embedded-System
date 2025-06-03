@@ -33,7 +33,7 @@ int main(void) {
         TimeCapture_Start();
         uint32_t timeout = 0;
 
-        while(!captureFlag && timeout++ < 1000000) {
+        while(!captureFlag && timeout++ < 2000000) {
             ProcessInputCapture();
         }
 
@@ -44,16 +44,58 @@ int main(void) {
             }
 
             if(period != 0) {
+                // Print period label
                 UART2_SendString("P:");
-                char buf[10];
+
+                // First print the period value
+                char buf[12];  // Increased buffer size for both numbers
                 int i = 0;
                 uint32_t num = period;
-                do { buf[i++] = (num % 10) + '0'; num /= 10; } while(num > 0);
-                while(i > 0) {
+
+                // Handle case when num is 0 (though we already checked period != 0)
+                if (num == 0) {
+                    buf[i++] = '0';
+                }
+                else {
+                    // Convert period to string in reverse order
+                    while (num > 0 && i < sizeof(buf)-1) {
+                        buf[i++] = (num % 10) + '0';
+                        num /= 10;
+                    }
+                }
+
+                // Send period characters in correct order
+                while (i > 0) {
+                    while(!(USART2->SR & USART_SR_TXE)); // Wait for TX buffer empty
+                    USART2->DR = buf[--i];
+                }
+
+                // Print separator
+                UART2_SendString(" (");
+
+                // Now print the frequency (1000000/period)
+                num = 1000000/period; // frequency in Hz
+                i = 0;
+
+                // Convert frequency to string
+                if (num == 0) {
+                    buf[i++] = '0';
+                }
+                else {
+                    while (num > 0 && i < sizeof(buf)-1) {
+                        buf[i++] = (num % 10) + '0';
+                        num /= 10;
+                    }
+                }
+
+                // Send frequency characters in correct order
+                while (i > 0) {
                     while(!(USART2->SR & USART_SR_TXE));
                     USART2->DR = buf[--i];
                 }
-                UART2_SendString("us\r\n");
+
+                // Print unit and newline
+                UART2_SendString("Hz)\r\n");
             }
         }
 

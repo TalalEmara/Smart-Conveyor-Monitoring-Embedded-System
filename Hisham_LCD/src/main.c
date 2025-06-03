@@ -1,27 +1,17 @@
 #include "RCC.h"
 #include "Gpio.h"
-#include "Adc.h"
 #include "lcd.h"
 #include "Std_Types.h"
 #include "pwm.h"
+#include "EXTI.h"
 #include <stdio.h>
 
-volatile uint8 counter = 0x00;
-volatile uint8 button = 0;
-volatile uint8 toggle = 1;
+#define DELAY_LOOP 500000
 
-#define NUMBER_OF_CYCLES    1000000
+volatile uint8_t emergencyStop = 0;
+uint8_t duty = 0; // DO NOT FORGET : when change with potentiometer during stop , should be changedd
 
-extern volatile uint16_t adc_result;
-extern volatile bool adc_new_data_available;
 
-void delay_millis(uint32_t delay) {
-    for (volatile uint32_t i = 0; i < (NUMBER_OF_CYCLES / 1000) * delay; i++) {
-        __asm__("nop");
-    }
-}
-
-// Simple function to convert float to string (voltage)
 void float_to_string(float value, char* buffer, uint8_t decimal_places) {
     int integer_part = (int)value;
     int fractional_part = (int)((value - integer_part) * 100); // 2 decimal places
@@ -84,128 +74,94 @@ void int_to_string(int value, char* buffer) {
     buffer[index] = '\0';
 }
 
+void delay(volatile uint32_t count) {
+    for(volatile uint32_t i = 0; i < count; i++) {
+        __asm__("nop");
+    }
+}
+
+void LCD_PrintStatus(void) {
+    if (emergencyStop) {
+        LCD_SetCursor(0, 0);
+        LCD_PrintString("!!! EMERGENCY !!!");
+        LCD_SetCursor(1, 0);
+        LCD_PrintString("SYSTEM STOPPED  ");
+    } else {
+        char buf[16];
+        int_to_string(duty, buf);
+        LCD_SetCursor(0, 0);
+        LCD_PrintString("System Running  ");
+        LCD_SetCursor(1, 0);
+        LCD_PrintString("                ");
+        LCD_SetCursor(1, 0);
+        LCD_PrintString(buf);
+    }
+}
+
+void EXTI9_5_IRQHandler(void) {
+    // Check if interrupt is from line 8 (PA8) - Emergency Stop
+    if ((EXTI_REGISTERS->EXTI_PR & (1 << 8)) != 0) {
+        EXTI_ClearPending(8);
+        delay(50000); // debounce delay
+        emergencyStop = 1;
+        PWM_SetDutyCycle(0); // stop PWM immediately
+        LCD_PrintStatus();
+    }
+
+    // Check if interrupt is from line 9 (PA9) - Reset after emergency
+    if ((EXTI_REGISTERS->EXTI_PR & (1 << 9)) != 0) {
+        EXTI_ClearPending(9);
+        delay(50000); // debounce delay
+        if (emergencyStop) {
+            emergencyStop = 0;
+            // DO NOT FORGET : when change with potentiometer during stop , should be changedd
+            LCD_PrintStatus();
+        }
+    }
+}
+
 int main(void) {
-    // Initialize RCC first
     Rcc_Init();
+
     Rcc_Enable(RCC_GPIOA);
     Rcc_Enable(RCC_GPIOB);
     Rcc_Enable(RCC_GPIOC);
     Rcc_Enable(RCC_SYSCFG);
+    Rcc_Enable(RCC_TIM3);
 
-    // Add ADC clock enable if not done in Rcc_Init()
-    // Make sure your RCC module enables ADC1 clock, or add it manually:
-    // RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
-
-    // Initialize the pins
-    Gpio_Init(GPIO_A, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); // ADC pin for potentiometer
-    Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL); // PWM output pin
-
-    // Initialize the LCD first and test it
     LCD_Init();
-    LCD_SetCursor(LCD_ROW_0, 0);
-    LCD_PrintString("Initializing...");
-    delay_millis(500); // Give some time to see this message
-
-    // Initialize PWM
     PWM_Init();
 
-    LCD_SetCursor(LCD_ROW_1, 0);
-    LCD_PrintString("PWM OK");
-    delay_millis(500);
+    // Configure PA8 and PA9 as input pull-up
+    Gpio_Init(GPIO_A, 8, GPIO_INPUT, GPIO_PULL_UP);
+    Gpio_Init(GPIO_A, 9, GPIO_INPUT, GPIO_PULL_UP);
 
-    // Init and configure ADC with debug messages
-    LCD_SetCursor(LCD_ROW_0, 0);
-    LCD_PrintString("ADC Init...     "); // Clear previous message
+    delay(10000);
 
-    ADC_Status_t adc_status = ADC_Init();
-    if (adc_status != ADC_OK) {
-        LCD_SetCursor(LCD_ROW_1, 0);
-        LCD_PrintString("ADC Init FAIL");
-        while(1); // Stop here if ADC init fails
-    }
+    // Configure EXTI lines for PA8 and PA9 falling edge trigger
+    EXTI_Init(GPIO_A, 8, FALLING_EDGE_TRIGGERED);
+    EXTI_Init(GPIO_A, 9, FALLING_EDGE_TRIGGERED);
+    EXTI_Enable(8);
+    EXTI_Enable(9);
 
-    LCD_SetCursor(LCD_ROW_1, 0);
-    LCD_PrintString("ADC Init OK   ");
-    delay_millis(500);
+    LCD_SetCursor(0, 0);
+    LCD_PrintString("Motor speed");
 
-    ADC_Config_t config = {
-        .channel = 0,            // PA0 = ADC1_IN0
-        .sampling_time = 5,      // 84 cycles
-        .continuous_mode = true
-    };
+    delay(2000000);
 
-    adc_status = ADC_Configure(&config);
-    if (adc_status != ADC_OK) {
-        LCD_SetCursor(LCD_ROW_1, 0);
-        LCD_PrintString("ADC Cfg FAIL");
-        while(1); // Stop here if ADC config fails
-    }
+    emergencyStop = 0;
+    duty = 0;
+    LCD_PrintStatus();
 
-    LCD_SetCursor(LCD_ROW_1, 0);
-    LCD_PrintString("ADC Cfg OK    ");
-    delay_millis(500);
-
-    adc_status = ADC_StartConversion(config.channel);
-    if (adc_status != ADC_OK) {
-        LCD_SetCursor(LCD_ROW_1, 0);
-        LCD_PrintString("ADC Start FAIL");
-        while(1); // Stop here if ADC start fails
-    }
-
-    // Clear LCD and show normal operation
-    LCD_SetCursor(LCD_ROW_0, 0);
-    LCD_PrintString("Voltage:        ");
-    LCD_SetCursor(LCD_ROW_1, 0);
-    LCD_PrintString("Speed:          ");
-
-    uint8_t duty;
-    char voltage_str[16];
-    char duty_str[8];
-    char speed_display[16];
-    uint32_t loop_counter = 0;
-
-    while (1) {
-        // Convert raw ADC value to voltage
-        float voltage = ADC_RawToVoltage(adc_result);
-
-        // Convert voltage to string manually
-        float_to_string(voltage, voltage_str, 2);
-
-        duty = (uint8_t)(adc_result * 100 / 4095);    // Convert to 0-100% duty cycle
-
-        PWM_SetDutyCycle(duty);              // Set PWM output
-        LCD_SetCursor(LCD_ROW_0, 9);         // Set cursor to the first row, after "Voltage: "
-        LCD_PrintString(voltage_str);        // Print voltage value
-
-        LCD_SetCursor(LCD_ROW_1, 0);
-        // Manually create "Speed: XXX%" string
-        speed_display[0] = 'S';
-        speed_display[1] = 'p';
-        speed_display[2] = 'e';
-        speed_display[3] = 'e';
-        speed_display[4] = 'd';
-        speed_display[5] = ':';
-        speed_display[6] = ' ';
-
-        // Convert duty to string and add to display
-        int_to_string(duty, duty_str);
-        int i = 0;
-        while (duty_str[i] != '\0') {
-            speed_display[7 + i] = duty_str[i];
-            i++;
-        }
-        speed_display[7 + i] = '%';
-        speed_display[8 + i] = '\0';
-
-        LCD_PrintString(speed_display);
-
-        delay_millis(100);
-        loop_counter++;
-
-        // Debug: Show that we're in the main loop
-        if (loop_counter % 10 == 0) {  // Every second
-            LCD_SetCursor(LCD_ROW_1, 14);
-            LCD_PrintString((loop_counter / 10) % 2 ? "*" : " ");
+    while(1) {
+        if (!emergencyStop) {
+            PWM_SetDutyCycle(duty);
+            duty += 10;
+            if (duty > 100) duty = 0;
+            LCD_PrintStatus();
+            delay(DELAY_LOOP);
+        } else {
+            delay(DELAY_LOOP);
         }
     }
 

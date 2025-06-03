@@ -78,15 +78,12 @@ void ProcessInputCapture(void) {
         if(!captureFlag) {
             last_capture = current_capture;
             captureFlag = 1;
-            // Switch to opposite edge detection
-            TIM2->CCER ^= TIM_CCER_CC1P;
+
         } else {
             // Calculate period considering overflows
             period = (overflow_count * 0xFFFFFFFF) + current_capture - last_capture;
             captureFlag = 0;
             overflow_count = 0;
-            // Switch back to initial edge detection
-            TIM2->CCER ^= TIM_CCER_CC1P;
         }
         TIM2->SR &= ~TIM_SR_CC1IF;
     }

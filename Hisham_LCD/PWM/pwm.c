@@ -1,23 +1,28 @@
-#include "Gpio.h"
-#include "Gpio.c"
+// pwm.c
+#include "pwm.h"
+// Updated PWM_Init() - use PB0 instead of PA7
 void PWM_Init(void) {
-    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_TIM1EN;
+    // Enable Timer clock TIM3
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
 
-    // Set PA8 to AF Push-Pull
-    GPIOA->CRH &= ~(0xF << 0);
-    GPIOA->CRH |= (0xB << 0);
+    // Configure PB0 as alternate function for PWM output (TIM3_CH3)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+    GPIOB->MODER &= ~(0x3 << (0*2)); // Clear PB0
+    GPIOB->MODER |= (0x2 << (0*2));  // Set PB0 to Alternate Function
+    GPIOB->AFR[0] &= ~(0xF << (0*4)); // Clear AF bits for PB0
+    GPIOB->AFR[0] |= (0x2 << (0*4));  // AF2 = TIM3_CH3
 
-    TIM1->PSC = 72 - 1;
-    TIM1->ARR = 1000;
-    TIM1->CCR1 = 0;
+    // Timer configuration for PWM Mode 1
+    TIM3->PSC = 16 - 1;   // prescaler
+    TIM3->ARR = 1000 - 1; // auto-reload
 
-    TIM1->CCMR1 |= 0x60;
-    TIM1->CCER |= TIM_CCER_CC1E;
-    TIM1->BDTR |= TIM_BDTR_MOE;
-    TIM1->CR1 |= TIM_CR1_CEN;
+    TIM3->CCR3 = 0;         // Initial duty cycle 0% for CH3
+    TIM3->CCMR2 |= TIM_CCMR2_OC3M_1 | TIM_CCMR2_OC3M_2; // PWM mode 1 for CH3
+    TIM3->CCER |= TIM_CCER_CC3E;  // Enable channel 3 output
+    TIM3->CR1 |= TIM_CR1_CEN;     // Enable timer
 }
 
-void PWM_SetDuty(uint16_t duty) {
-    if (duty > 1000) duty = 1000;
-    TIM1->CCR1 = duty;
+void PWM_SetDutyCycle(uint8_t duty) {
+    if (duty > 100) duty = 100;
+    TIM3->CCR3 = (TIM3->ARR + 1) * duty / 100; // Use CCR3 for channel 3
 }

@@ -6,10 +6,16 @@
 #include "EXTI.h"
 #include <stdio.h>
 
-#define DELAY_LOOP 500000
+#define DELAY_LOOP 50000
+#define DEBOUNCE_DELAY_MS   50
+
+#define IR_BUTTON_PORT GPIO_A
+#define IR_BUTTON_PIN  15
 
 volatile uint8_t emergencyStop = 0;
 uint8_t duty = 0; // DO NOT FORGET : when change with potentiometer during stop , should be changedd
+volatile uint16 object_count = 0;
+volatile uint32_t system_ms = 0;
 
 
 void float_to_string(float value, char* buffer, uint8_t decimal_places) {
@@ -78,6 +84,7 @@ void delay(volatile uint32_t count) {
     for(volatile uint32_t i = 0; i < count; i++) {
         __asm__("nop");
     }
+    system_ms += (count/1000);  // Track time
 }
 
 void LCD_PrintStatus(void) {
@@ -115,9 +122,56 @@ void EXTI9_5_IRQHandler(void) {
         if (emergencyStop) {
             emergencyStop = 0;
             // DO NOT FORGET : when change with potentiometer during stop , should be changedd
-            LCD_PrintStatus();
+            // LCD_PrintStatus();
         }
     }
+}
+
+// Falling edge detection with debouncing
+uint8 detect_falling_edge(uint8 button_port, uint8 button_pin) {
+    static uint8_t previous_state = 0;
+    static uint8_t button_pressed = 0;
+    static uint32_t last_change_time = 0;
+
+    uint8_t current_state = Gpio_ReadPin(button_port, button_pin);
+
+    // Detect transition from released (1) to pressed (0) = falling edge
+    if (previous_state == 1 && current_state == 0) {
+        // Check debounce time
+        if (system_ms - last_change_time > DEBOUNCE_DELAY_MS) {
+            button_pressed = 1;
+            last_change_time = system_ms;
+        }
+    }
+
+    // Reset when button is released
+    if (current_state == 1) {
+        button_pressed = 0;
+    }
+
+    previous_state = current_state;
+
+    // Return 1 only once per button press
+    if (button_pressed && current_state == 0) {
+        button_pressed = 0;  // Reset flag
+        return 1;
+    }
+
+    return 0;
+}
+
+void update_display(void) {
+    char count_str[12];
+
+    // Clear and update first line
+    LCD_SetCursor(LCD_ROW_0, 0);
+    LCD_PrintString("Objects Counted:");
+
+    // Update count on second line
+    LCD_SetCursor(LCD_ROW_1, 0);
+    int_to_string(object_count, count_str);
+    LCD_PrintString(count_str);
+    LCD_PrintString("               ");  // Clear any remaining characters
 }
 
 int main(void) {
@@ -136,6 +190,8 @@ int main(void) {
     Gpio_Init(GPIO_A, 8, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_A, 9, GPIO_INPUT, GPIO_PULL_UP);
 
+    Gpio_Init(IR_BUTTON_PORT, IR_BUTTON_PIN, GPIO_INPUT, GPIO_PULL_UP);
+
     delay(10000);
 
     // Configure EXTI lines for PA8 and PA9 falling edge trigger
@@ -147,7 +203,7 @@ int main(void) {
     LCD_SetCursor(0, 0);
     LCD_PrintString("Motor speed");
 
-    delay(2000000);
+    delay(20000);
 
     emergencyStop = 0;
     duty = 0;
@@ -158,6 +214,14 @@ int main(void) {
             PWM_SetDutyCycle(duty);
             duty += 10;
             if (duty > 100) duty = 0;
+            if (detect_falling_edge(IR_BUTTON_PORT, IR_BUTTON_PIN)) {
+                object_count++;
+                // update_display();
+
+                // Optional: Show brief "DETECTED!" message
+                LCD_SetCursor(LCD_ROW_1, 10);
+                LCD_PrintString("NEW!");
+            }
             LCD_PrintStatus();
             delay(DELAY_LOOP);
         } else {

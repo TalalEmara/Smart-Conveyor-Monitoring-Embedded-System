@@ -19,29 +19,29 @@ void TimeCapture_Init(void) {
     GPIOA->AFR[0] |= (0x1 << (5*4));         // Set AF1 for TIM2_CH1
 
     // Configure TIM2 for input capture
-    TIM2->PSC = 16000-1;                          // 84MHz/(83+1) = 1MHz (1µs resolution)
-    TIM2->EGR |= TIM_EGR_UG;                 // Force update event to load new PSC
-    TIM2->SR &= ~TIM_SR_UIF;
-    TIM2->ARR = 0xFFFFFFFF  ;                  // Maximum auto-reload value
-    TIM2->CR1 &= ~TIM_CR1_CEN;               // Ensure timer is stopped during config
+    TIMER2->PSC = 16000-1;                          // Did not work 84MHz/(83+1) = 1MHz (1µs resolution)
+    TIMER2->EGR |= UPDATE_GENERATION_MSK;                 // Force update event to load new PSC
+    TIMER2->SR &= ~UIF;
+    TIMER2->ARR = 0xFFFFFFFF  ;                 //Hisham dont change this
+    TIMER2->CR1 &= ~COUNTER_ENABLE_MSK;               // Ensure timer is stopped during config
 
     // Configure Channel 1 for input capture
-    TIM2->CCMR1 &= ~(TIM_CCMR1_CC1S | TIM_CCMR1_IC1F);  // Clear capture selection and filter bits
-    TIM2->CCMR1 |= TIM_CCMR1_CC1S_0;        // CC1S = 01: TI1 mapped to CC1
-    // Add input filter to reduce noise
+    TIMER2->CCMR1 &= ~(CC1S_MSK | IC1F_MSK);  // Clear capture selection and filter bits
+    TIMER2->CCMR1 |= TIM_CCMR1_CC1S_0;        // CC1S = 01: TI1 mapped to CC1
+
     // TIM2->CCMR1 |= (0x3 << 4);              // IC1F = 0011: fSAMPLING=fCK_INT, N=8
 
     // Configure capture on rising edge
-    TIM2->CCER &= ~(TIM_CCER_CC1P | TIM_CCER_CC1NP); // Clear polarity bits (rising edge)
-    TIM2->CCER |= TIM_CCER_CC1E;             // Enable capture
+    TIMER2->CCER &= ~(CC1P_Msk | CC1NP_MSK); // Clear polarity bits (rising edge)
+    TIMER2->CCER |= CAPTURE_ENABLE_MSK;             // Enable capture
 
     // Enable update interrupt for overflow handling (even though you can't use interrupts)
     // We'll poll for these flags instead
-    TIM2->DIER = 0;                          // Clear all interrupt enables first
-    TIM2->SR = 0;                            // Clear all flags
+    TIMER2->DIER = 0;                          // Clear all interrupt enables first
+    TIMER2->SR = 0;                            // Clear all flags
 
     // Enable the timer
-    TIM2->CR1 |= TIM_CR1_CEN;
+    TIMER2->CR1 |= COUNTER_ENABLE_MSK;
 }
 
 uint32_t TimeCapture_GetPeriod(void) {
@@ -59,23 +59,23 @@ uint32_t TimeCapture_GetPeriod(void) {
 // }
 
 void TimeCapture_Stop(void) {
-    TIM2->CR1 &= ~TIM_CR1_CEN;
+    TIMER2->CR1 &= ~COUNTER_ENABLE_MSK;
 }
 
 // Call this function regularly in your main loop to process captures
 // Fixed calculation in ProcessInputCapture
 void ProcessInputCapture(void) {
-    uint32_t sr = TIM2->SR;
+    uint32_t sr = TIMER2->SR;
 
     // Handle timer overflow
-    if(sr & TIM_SR_UIF) {
+    if(sr & UIF) {
         overflow_count++;
-        TIM2->SR &= ~TIM_SR_UIF;  // Clear overflow flag
+        TIMER2->SR &= ~UIF;  // Clear overflow flag
     }
 
     // Handle input capture
-    if(sr & TIM_SR_CC1IF) {
-        uint32_t current_capture = TIM2->CCR1;
+    if(sr & CC1_IF) {
+        uint32_t current_capture = TIMER2->CCR1;
 
         if(!captureFlag) {
             // First capture - store reference point
@@ -118,15 +118,15 @@ void ProcessInputCapture(void) {
 
 // Also fix the start function to ensure clean start
 void TimeCapture_Start(void) {
-    TIM2->CR1 &= ~TIM_CR1_CEN;       // Stop timer first
-    TIM2->CNT = 0;                   // Reset counter to 0
+    TIMER2->CR1 &= ~COUNTER_ENABLE_MSK;       // Stop timer first
+    TIMER2->CNT = 0;                   // Reset counter to 0
     captureFlag = 0;
     capture1 = 0;
     capture2 = 0;
     period = 0;
     overflow_count = 0;
-    TIM2->SR = 0;                    // Clear all flags
-    TIM2->CR1 |= TIM_CR1_CEN;        // Restart timer
+    TIMER2->SR = 0;                    // Clear all flags
+    TIMER2->CR1 |= COUNTER_ENABLE_MSK;        // Restart timer
 }
 // Helper functions (optional - you can remove if not needed)
 // uint8_t TimeCapture_HasNewPeriod(void) {

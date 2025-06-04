@@ -63,9 +63,9 @@ int main(void) {
     Rcc_Enable(RCC_GPIOC);
     Rcc_Enable(RCC_SYSCFG);
     Rcc_Enable(RCC_ADC1);
+    
 
-
-    Gpio_Init(GPIO_C, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); // Potentiometer on PC0
+    Gpio_Init(GPIO_A, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN);
     Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL);
 
     LCD_Init();

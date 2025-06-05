@@ -128,47 +128,30 @@ int main(void) {
     LCD_PrintString("Speed:          ");
 
     char voltage_str[16];
-    char duty_str[8];
     char speed_display[16];
-    uint32_t loop_counter = 0;
 
     while (1) {
         uint16_t raw_value = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
-
-        // Add bounds checking
         if (raw_value > 4095) raw_value = 4095;
 
         float voltage = (raw_value * 3.3f) / 4095.0f;
-        uint8_t duty = (uint8_t)(raw_value * 100 / 4095);
+        uint8_t duty = (uint8_t)((raw_value * 100.0f) / 4095.0f);
 
         PWM_SetDutyCycle(duty);
 
+        // Display voltage
         float_to_string(voltage, voltage_str, 2);
         LCD_SetCursor(LCD_ROW_0, 9);
         LCD_PrintString(voltage_str);
 
+        // Display speed
         LCD_SetCursor(LCD_ROW_1, 0);
-        speed_display[0] = 'S'; speed_display[1] = 'p';
-        speed_display[2] = 'e'; speed_display[3] = 'e';
-        speed_display[4] = 'd'; speed_display[5] = ':'; speed_display[6] = ' ';
-
-        int_to_string(duty, duty_str);
-        int i = 0;
-        while (duty_str[i] != '\0') {
-            speed_display[7 + i] = duty_str[i];
-            i++;
-        }
-        speed_display[7 + i] = '%';
-        speed_display[8 + i] = '\0';
+        sprintf(speed_display, "Speed: %3d%%", duty);
         LCD_PrintString(speed_display);
 
         delay_millis(100);
-        loop_counter++;
-        if (loop_counter % 10 == 0) {
-            LCD_SetCursor(LCD_ROW_1, 14);
-            LCD_PrintString((loop_counter / 10) % 2 ? "*" : " ");
-        }
     }
+
 
     return 0;
 }

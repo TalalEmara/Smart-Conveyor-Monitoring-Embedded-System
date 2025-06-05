@@ -7,7 +7,7 @@
 #define RW_PIN 2
 #define E_PIN  3
 #define D4_PIN 4
-#define D5_PIN 5
+#define D5_PIN 10
 #define D6_PIN 6
 #define D7_PIN 7
 

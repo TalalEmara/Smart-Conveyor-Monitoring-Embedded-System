@@ -1,3 +1,5 @@
+#include <TimeCapture.h>
+
 #include "RCC.h"
 #include "Gpio.h"
 #include "Adc.h"
@@ -150,6 +152,8 @@ int main(void) {
     LCD_Init();
     PWM_Init();
     ADC_Init();
+    TimeCapture_Init();
+
 
     EXTI_Init(GPIO_A, EMERGENCY_STOP_PIN, FALLING_EDGE_TRIGGERED);
     EXTI_Init(GPIO_A, RESET_BUTTON_PIN, FALLING_EDGE_TRIGGERED);
@@ -161,6 +165,48 @@ int main(void) {
 
     while (1) {
         if (!emergencyStop) {
+            ///////////////////////////////////////////////////////////////////
+            ////////////////// Talal speed measurement ////////////////////////
+            ///////////////////////////////////////////////////////////////////
+            TimeCapture_Start();
+            uint32_t timeout = 0;
+
+            while(!captureFlag && timeout++ < 2000000) {
+            ProcessInputCapture();
+        }
+
+        if(captureFlag) {
+            timeout = 0;
+            while(captureFlag && timeout++ < 2000000) {
+                ProcessInputCapture();
+            }
+
+            if(period != 0) {
+                // Print period label
+                LCD_SetCursor(0, 0);
+                LCD_PrintString("P:");
+                LCD_SetCursor(LCD_ROW_0, 3);
+                char period_str[12];
+                int_to_string(period, period_str);
+                LCD_PrintString(period_str);
+
+
+                // Now print the frequency (1000000/period)
+                LCD_SetCursor(LCD_ROW_1,0);
+                LCD_PrintString("F:");
+                float num = 1000000.0/period; // frequency in Hz
+                char freq_timer_buf[12];
+                float_to_string(num, freq_timer_buf, 2);
+                LCD_SetCursor(LCD_ROW_1, 3);
+                LCD_PrintString(freq_timer_buf);
+
+                delay_millis(1000);
+            }
+        }
+
+            ///////////////////////////////////////////////////////////////////
+            ////////////////////////////// ADC and PWM ////////////////////////
+            ///////////////////////////////////////////////////////////////////
             uint16_t raw_value = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
             if (raw_value > 4095) raw_value = 4095;
 

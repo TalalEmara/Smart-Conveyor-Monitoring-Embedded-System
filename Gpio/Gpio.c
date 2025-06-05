@@ -75,7 +75,7 @@ void Gpio_Init(uint8 PortName, uint8 PinNumber, uint8 PinMode, uint8 DefaultStat
 
 uint8 Gpio_WritePin(uint8 PortName, uint8 PinNumber, uint8 Data) {
     uint32 mode = 0;
-    
+
     // Check if pin is configured as output
     switch (PortName) {
         case GPIO_A:
@@ -113,13 +113,13 @@ uint8 Gpio_WritePin(uint8 PortName, uint8 PinNumber, uint8 Data) {
         default:
             return NOK;
     }
-    
+
     return OK;
 }
 
 uint8 Gpio_ReadPin(uint8 PortName, uint8 PinNumber) {
     uint8 pinValue = 0;
-    
+
     switch (PortName) {
         case GPIO_A:
             pinValue = (GPIOA_IDR >> PinNumber) & 0x1;
@@ -136,6 +136,6 @@ uint8 Gpio_ReadPin(uint8 PortName, uint8 PinNumber) {
         default:
             return NOK;
     }
-    
+
     return pinValue;
 }

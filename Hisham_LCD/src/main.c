@@ -4,7 +4,6 @@
 #include "lcd.h"
 #include "pwm.h"
 #include "EXTI.h"
-#include <stdio.h>
 
 #define NUMBER_OF_CYCLES 1000000
 #define POTENTIOMETER_ADC_CHANNEL 10
@@ -22,6 +21,7 @@ volatile uint8_t object_count = 0;
 
 uint8_t duty = 0;
 float prev_voltage = -1.0f;
+uint8_t prev_duty = 0xFF;  // Moved here as global to reset after reset button
 
 void delay_millis(uint32_t delay) {
     for (volatile uint32_t i = 0; i < (NUMBER_OF_CYCLES / 1000) * delay; i++);
@@ -53,19 +53,35 @@ void float_to_string(float value, char* buffer, uint8_t decimal_places) {
     buffer[buf_index] = '\0';
 }
 
+void int_to_string(int value, char* buffer) {
+    if (value == 0) {
+        buffer[0] = '0';
+        buffer[1] = '\0';
+        return;
+    }
+
+    char temp[10];
+    int index = 0;
+    while (value > 0) {
+        temp[index++] = '0' + (value % 10);
+        value /= 10;
+    }
+    for (int i = 0; i < index; i++) {
+        buffer[i] = temp[index - 1 - i];
+    }
+    buffer[index] = '\0';
+}
+
 void LCD_PrintStatus(void) {
+    LCD_SetCursor(0, 0);
     if (emergencyStop) {
-        LCD_SetCursor(0, 0);
         LCD_PrintString("!!! EMERGENCY !!!");
         LCD_SetCursor(1, 0);
         LCD_PrintString("SYSTEM STOPPED  ");
     } else {
-        LCD_SetCursor(0, 0);
-        LCD_PrintString("Voltage:        ");
+        LCD_PrintString("Voltage:         ");
         LCD_SetCursor(1, 0);
-        char buf[16];
-        sprintf(buf, "Speed: %3d%%    ", duty);
-        LCD_PrintString(buf);
+        LCD_PrintString("Speed:          ");
     }
 }
 
@@ -83,7 +99,8 @@ void EXTI9_5_IRQHandler(void) {
         delay_millis(DEBOUNCE_DELAY_MS);
         if (emergencyStop) {
             emergencyStop = 0;
-            prev_voltage = -999.0f;  // Force voltage update on next loop
+            prev_voltage = -999.0f;
+            prev_duty = 0xFF;  // Ensure speed updates after reset
             LCD_PrintStatus();
         }
     }
@@ -118,7 +135,6 @@ uint8 detect_falling_edge(uint8 button_port, uint8 button_pin) {
 }
 
 int main(void) {
-    // Initialize clocks
     Rcc_Init();
     Rcc_Enable(RCC_GPIOA);
     Rcc_Enable(RCC_GPIOB);
@@ -126,32 +142,24 @@ int main(void) {
     Rcc_Enable(RCC_SYSCFG);
     Rcc_Enable(RCC_ADC1);
 
-    // GPIO setup
-    Gpio_Init(GPIO_C, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); // ADC input PC0
-    Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL);    // PWM output PB0
+    Gpio_Init(GPIO_C, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); // PC0 - ADC
+    Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL);    // PB0 - PWM output
     Gpio_Init(GPIO_A, EMERGENCY_STOP_PIN, GPIO_INPUT, GPIO_PULL_UP);
     Gpio_Init(GPIO_A, RESET_BUTTON_PIN, GPIO_INPUT, GPIO_PULL_UP);
 
-    // Initialize LCD, PWM, ADC
     LCD_Init();
     PWM_Init();
     ADC_Init();
 
-    // Configure EXTI for buttons
     EXTI_Init(GPIO_A, EMERGENCY_STOP_PIN, FALLING_EDGE_TRIGGERED);
     EXTI_Init(GPIO_A, RESET_BUTTON_PIN, FALLING_EDGE_TRIGGERED);
     EXTI_Enable(EMERGENCY_STOP_PIN);
     EXTI_Enable(RESET_BUTTON_PIN);
-
-    // Enable NVIC interrupt for EXTI lines 9 to 5
     NVIC->ISER[0] = (1 << EXTI9_5_IRQn);
 
     LCD_PrintStatus();
 
-    uint8_t prev_duty = 0xFF;
-
     while (1) {
-
         if (!emergencyStop) {
             uint16_t raw_value = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
             if (raw_value > 4095) raw_value = 4095;
@@ -162,10 +170,11 @@ int main(void) {
             if (new_duty != prev_duty) {
                 duty = new_duty;
                 PWM_SetDutyCycle(duty);
-                char speed_str[16];
-                sprintf(speed_str, "Speed: %3d%%", duty);
-                LCD_SetCursor(1, 0);
-                LCD_PrintString(speed_str);
+                char duty_str[10];
+                int_to_string(duty, duty_str);
+                LCD_SetCursor(1, 7);
+                LCD_PrintString(duty_str);
+                LCD_PrintString("%     ");
                 prev_duty = duty;
             }
 
@@ -180,14 +189,16 @@ int main(void) {
             if (detect_falling_edge(IR_BUTTON_PORT, IR_BUTTON_PIN)) {
                 object_count++;
 
-                LCD_Clear();  // Clear the screen
+                LCD_Clear();
                 LCD_SetCursor(0, 4);
                 LCD_PrintString("NEW OBJECT");
 
-                char count_str[16];
-                sprintf(count_str, "Count: %3d", object_count);
+                char count_str[10];
+                int_to_string(object_count, count_str);
                 LCD_SetCursor(1, 4);
+                LCD_PrintString("Count: ");
                 LCD_PrintString(count_str);
+                LCD_PrintString("   ");
 
                 delay_millis(600);
 
@@ -195,9 +206,7 @@ int main(void) {
                 prev_voltage = -999.0f;
                 prev_duty = 0xFF;
             }
-
         }
-
     }
 
     return 0;

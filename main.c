@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #define NUMBER_OF_CYCLES 1000000
+#define POTENTIOMETER_ADC_CHANNEL 10  // PC0 is ADC1_IN10
 
 void delay_millis(uint32_t delay) {
     for (volatile uint32_t i = 0; i < (NUMBER_OF_CYCLES / 1000) * delay; i++);
@@ -56,7 +57,10 @@ void int_to_string(int value, char* buffer) {
     buffer[index] = '\0';
 }
 
+
+
 int main(void) {
+    // Initialize system clocks
     Rcc_Init();
     Rcc_Enable(RCC_GPIOA);
     Rcc_Enable(RCC_GPIOB);
@@ -64,49 +68,60 @@ int main(void) {
     Rcc_Enable(RCC_SYSCFG);
     Rcc_Enable(RCC_ADC1);
 
+    // Initialize GPIOs
+    Gpio_Init(GPIO_C, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); // Potentiometer on PC0
+    Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL);     // PWM output on PB0
 
-    Gpio_Init(GPIO_C, 0, GPIO_ANALOG, GPIO_NO_PULL_DOWN); 
-    Gpio_Init(GPIO_B, 0, GPIO_OUTPUT, GPIO_PUSH_PULL);
-
+    // Initialize LCD
     LCD_Init();
     LCD_SetCursor(LCD_ROW_0, 0);
     LCD_PrintString("Initializing...");
     delay_millis(500);
 
+    // Initialize PWM
     PWM_Init();
     LCD_SetCursor(LCD_ROW_1, 0);
     LCD_PrintString("PWM OK");
     delay_millis(500);
 
+
+    ADC1->CR1 = 0;
+    ADC1->CR2 = 0;
+    delay_millis(1);
+
+    ADC1->CR1 &= ~ADC_CR1_RES;       // 12-bit resolution (00)
+    ADC1->CR2 &= ~ADC_CR2_ALIGN;     // Right alignment
+    ADC1->CR2 &= ~ADC_CR2_CONT;      // Single conversion mode
+    ADC1->CR1 &= ~ADC_CR1_SCAN;      // Disable scan mode
+    ADC1->SQR1 = 0;                  // One conversion in sequence
+
+
+    ADC1->SMPR1 &= ~(0x7 << 0);      // Clear channel 10 sampling time bits
+    ADC1->SMPR1 |= (0x7 << 0);       // Set maximum sampling time (480 cycles)
+
+    // Power on ADC
+    ADC1->CR2 |= ADC_CR2_ADON;
+    delay_millis(2);
+
     LCD_SetCursor(LCD_ROW_0, 0);
-    LCD_PrintString("ADC Init...     ");
-
-    if (ADC_Init() != ADC_OK) {
-        LCD_SetCursor(LCD_ROW_1, 0);
-        LCD_PrintString("ADC Init FAIL");
-        while (1);
-    }
-
-    LCD_SetCursor(LCD_ROW_1, 0);
     LCD_PrintString("ADC Init OK   ");
     delay_millis(500);
 
-    ADC_Config_t config = {
-        .channel = 0,
-        .sampling_time = 5,
-        .continuous_mode = false // Not needed in polling
-    };
+    uint16_t test_val1 = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
+    delay_millis(10);
+    uint16_t test_val2 = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
 
-    if (ADC_Configure(&config) != ADC_OK) {
-        LCD_SetCursor(LCD_ROW_1, 0);
-        LCD_PrintString("ADC Cfg FAIL");
-        while (1);
-    }
-
+    char test_str[16];
+    sprintf(test_str, "T1:%4d T2:%4d", test_val1, test_val2);
+    LCD_SetCursor(LCD_ROW_0, 0);
+    LCD_PrintString("                "); // Clear line
+    LCD_SetCursor(LCD_ROW_0, 0);
+    LCD_PrintString(test_str);
     LCD_SetCursor(LCD_ROW_1, 0);
-    LCD_PrintString("ADC Cfg OK    ");
-    delay_millis(500);
+    LCD_PrintString("Turn pot & wait");
+    delay_millis(3000);
 
+    // Main display setup
     LCD_SetCursor(LCD_ROW_0, 0);
     LCD_PrintString("Voltage:        ");
     LCD_SetCursor(LCD_ROW_1, 0);
@@ -118,11 +133,16 @@ int main(void) {
     uint32_t loop_counter = 0;
 
     while (1) {
-        uint16_t raw_value = ADC_ReadBlocking(0);
-        float voltage = ADC_RawToVoltage(raw_value);
+        uint16_t raw_value = ADC_ReadBlocking(POTENTIOMETER_ADC_CHANNEL);
+
+        // Add bounds checking
+        if (raw_value > 4095) raw_value = 4095;
+
+        float voltage = (raw_value * 3.3f) / 4095.0f;
         uint8_t duty = (uint8_t)(raw_value * 100 / 4095);
 
         PWM_SetDutyCycle(duty);
+
         float_to_string(voltage, voltage_str, 2);
         LCD_SetCursor(LCD_ROW_0, 9);
         LCD_PrintString(voltage_str);
@@ -140,12 +160,10 @@ int main(void) {
         }
         speed_display[7 + i] = '%';
         speed_display[8 + i] = '\0';
-
         LCD_PrintString(speed_display);
 
         delay_millis(100);
         loop_counter++;
-
         if (loop_counter % 10 == 0) {
             LCD_SetCursor(LCD_ROW_1, 14);
             LCD_PrintString((loop_counter / 10) % 2 ? "*" : " ");

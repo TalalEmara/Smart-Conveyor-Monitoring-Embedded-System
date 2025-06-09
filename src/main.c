@@ -191,8 +191,8 @@ uint8 detect_falling_edge_nonblocking(uint8 button_port, uint8 button_pin) {
     uint8_t current_state = Gpio_ReadPin(button_port, button_pin);
 
     // Detect falling edge with debouncing
-    if (previous_state == 1 && current_state == 0) {
-        if (system_ms - last_change_time > DEBOUNCE_DELAY_MS) {
+    if (system_ms - last_change_time > DEBOUNCE_DELAY_MS) {
+        if (previous_state == 1 && current_state == 0) {
             edge_detected = 1;
             last_change_time = system_ms;
         }

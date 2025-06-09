@@ -1,10 +1,3 @@
-/**
- * Gpio.h
- *
- *  Created on: 4/15/2025
- *  Author    : AbdallahDarwish
- */
-
 #ifndef GPIO_H
 #define GPIO_H
 

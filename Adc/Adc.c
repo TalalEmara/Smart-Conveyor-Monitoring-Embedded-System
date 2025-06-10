@@ -1,5 +1,5 @@
 #include "adc.h"
-#include "stm32f401xc.h"
+// #include "stm32f401xc.h"
 #include <stddef.h>  // Include for NULL definition
 #include <stdbool.h>
 
@@ -11,11 +11,12 @@ ADC_Status_t ADC_Init(void) {
     }
 
     // Reset ADC registers
-    ADC1->CR1 = 0;  // Control Register 1 (used for resolution, scan mode, etc.)
-    ADC1->CR2 = 0; // Control Register 2 (used for trigger, alignment, etc.)
+    ADC1->CR1 = 0;
+    ADC1->CR2 = 0;
 
     // Wait briefly for reset
     for (volatile int i = 0; i < 1000; i++);
+
 
     // ADC configuration
     ADC1->CR1 &= ~ADC_CR1_RES;       // 12-bit resolution (bits 24:25 = 00)
@@ -24,13 +25,13 @@ ADC_Status_t ADC_Init(void) {
     ADC1->CR2 &= ~ADC_CR2_EXTEN;     // Disable external trigger
     ADC1->SQR1 &= ~ADC_SQR1_L;       // One conversion in sequence
 
-    // Default sampling time for channel 0 (84 cycles)
-    // We'll override this per channel on ADC_Configure
-    ADC1->SMPR2 &= ~(0x7 << (0 * 3));
-    ADC1->SMPR2 |= (0x5 << (0 * 3));
+    // Sample time for channel 10 (PC0)
+    ADC1->SMPR1 &= ~(0x7 << 0);
+    ADC1->SMPR1 |= (0x7 << 0);    // max sample time
 
-    // Power on ADC
-    ADC1->CR2 |= ADC_CR2_ADON;
+    ADC1->CR2 |= ADC_CR2_ADON;    // Enable ADC
+
+
 
     // Wait for ADC stabilization (~10us or so)
     for (volatile int i = 0; i < 10000; i++);

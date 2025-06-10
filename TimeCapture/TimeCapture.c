@@ -1,5 +1,7 @@
 #include "TimeCapture.h"
 
+#include <Rcc.h>
+
 // Time Capture Implementation
 volatile uint32_t capture1 = 0;
 volatile uint32_t capture2 = 0;
@@ -9,9 +11,11 @@ volatile uint32_t overflow_count = 0;
 
 void TimeCapture_Init(void) {
     // Enable GPIOA and TIM2 clocks
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
+    // // RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    // RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+    Rcc_Enable(RCC_GPIOA);
+    Rcc_Enable(RCC_TIM2);
     // Configure PA5 as AF1 (TIM2_CH1) with proper alternate function
     GPIOA->MODER &= ~GPIO_MODER_MODER5;      // Clear mode bits
     GPIOA->MODER |= GPIO_MODER_MODER5_1;     // Set to AF mode (10)

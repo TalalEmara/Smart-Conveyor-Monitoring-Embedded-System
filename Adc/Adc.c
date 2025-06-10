@@ -11,8 +11,8 @@ ADC_Status_t ADC_Init(void) {
     }
 
     // Reset ADC registers
-    ADC1->CR1 = 0;
-    ADC1->CR2 = 0;
+    ADC1->CR1 = 0;  // Control Register 1 (used for resolution, scan mode, etc.)
+    ADC1->CR2 = 0; // Control Register 2 (used for trigger, alignment, etc.)
 
     // Wait briefly for reset
     for (volatile int i = 0; i < 1000; i++);
